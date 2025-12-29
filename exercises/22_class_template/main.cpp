@@ -10,6 +10,10 @@ struct Tensor4D {
     Tensor4D(unsigned int const shape_[4], T const *data_) {
         unsigned int size = 1;
         // TODO: 填入正确的 shape 并计算 size
+        for (int i = 0; i < 4; ++i) {
+            shape[i] = shape_[i];
+            size *= shape[i];
+        }
         data = new T[size];
         std::memcpy(data, data_, size * sizeof(T));
     }
@@ -28,6 +32,46 @@ struct Tensor4D {
     // 则 `this` 与 `others` 相加时，3 个形状为 `[1, 2, 1, 4]` 的子张量各自与 `others` 对应项相加。
     Tensor4D &operator+=(Tensor4D const &others) {
         // TODO: 实现单向广播的加法
+        // 规则：对每个维度 d：others.shape[d] 必须等于 shape[d] 或者为 1。
+        // 若为 1，则该维度发生广播：others 在该维度的索引恒为 0。
+        // 广播不改变内存，因为不是存储内容变了，而是索引思路变了。
+
+        for (int d = 0; d < 4; ++d) {
+            ASSERT(others.shape[d] == 1 || others.shape[d] == shape[d],
+                   "Shape mismatch: others.shape[d] must be 1 or equal to this.shape[d]");
+        }
+
+        const unsigned int this_strides[4]{
+            shape[1] * shape[2] * shape[3],
+            shape[2] * shape[3],
+            shape[3],
+            1,
+        };
+        const unsigned int other_strides[4]{
+            others.shape[1] * others.shape[2] * others.shape[3],
+            others.shape[2] * others.shape[3],
+            others.shape[3],
+            1,
+        };
+        const unsigned int this_size = shape[0] * shape[1] * shape[2] * shape[3];
+
+        for (unsigned int offset = 0; offset < this_size; ++offset) {
+            const unsigned int i0 = offset / this_strides[0];
+            const unsigned int r0 = offset % this_strides[0];
+            const unsigned int i1 = r0 / this_strides[1];
+            const unsigned int r1 = r0 % this_strides[1];
+            const unsigned int i2 = r1 / this_strides[2];
+            const unsigned int i3 = r1 % this_strides[2];
+
+            const unsigned int o0 = (others.shape[0] == 1) ? 0u : i0;
+            const unsigned int o1 = (others.shape[1] == 1) ? 0u : i1;
+            const unsigned int o2 = (others.shape[2] == 1) ? 0u : i2;
+            const unsigned int o3 = (others.shape[3] == 1) ? 0u : i3;
+            const unsigned int other_offset = o0 * other_strides[0] + o1 * other_strides[1] +
+                                              o2 * other_strides[2] + o3 * other_strides[3];
+
+            data[offset] += others.data[other_offset];
+        }
         return *this;
     }
 };
